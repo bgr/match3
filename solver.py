@@ -18,8 +18,14 @@ terminal_colors = {
     'M': 160,
     'S': 19,
     'J': 51,
-    'U': 232,
+    'U': 232,  # unknown empty tile that remains after matching
 }
+
+
+from collections import namedtuple
+Match = namedtuple('Match', 'index, block, length')
+Move = namedtuple('Move', 'row, column, block, offset, match_length')
+
 
 
 def get_random_grid(size=8):
@@ -44,10 +50,6 @@ def column(grid, col_num):
 
 def transpose(grid):
     return [column(grid, i) for i in range(len(grid))]
-
-
-from collections import namedtuple
-Match = namedtuple('Match', 'index, block, length')
 
 
 def find_matches_in_row(row, min_length=3):
@@ -90,8 +92,34 @@ def collapse_matches(cleared_grid):
     return transpose(cols)
 
 
+def moves_for_row(grid, row_index):
+    row = grid[row_index]
+    for i_col, _ in enumerate(row):
+        col = column(grid, i_col)
+        for col_shift, col_elem in enumerate(col):
+            row_test = list(row)
+            row_test[i_col] = col_elem
+            row_matches = find_matches_in_row(row_test)
+            for m in row_matches:
+                offset = row_index - col_shift
+                move = Move(row_index, i_col, col_elem, offset, m.length)
+                yield move
+
+
+def find_moves_on_axis(grid):
+    """ Returns all possible moves that will result in horizontal matches."""
+    moves = {}
+    for i, _ in enumerate(grid):
+        row_moves = list(moves_for_row(grid, i))
+        if row_moves:
+            moves[i] = row_moves
+    return moves
+
+
 grid = get_random_grid()
 print_grid(grid)
 
-print_grid(clear_matches(grid))
-print_grid(collapse_matches(clear_matches(grid)))
+#print_grid(clear_matches(grid))
+#print_grid(collapse_matches(clear_matches(grid)))
+
+print find_moves_on_axis(grid)

@@ -84,7 +84,14 @@ def clear_matches(grid):
     return transpose(grid)
 
 
+def collapse_matches(cleared_grid):
+    cols = [list(''.join(col).replace('U', '').rjust(len(cleared_grid), 'U'))
+            for col in transpose(cleared_grid)]
+    return transpose(cols)
+
+
 grid = get_random_grid()
 print_grid(grid)
 
 print_grid(clear_matches(grid))
+print_grid(collapse_matches(clear_matches(grid)))

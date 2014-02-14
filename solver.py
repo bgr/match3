@@ -23,8 +23,8 @@ terminal_colors = {
 
 
 from collections import namedtuple
-Match = namedtuple('Match', 'index, block, length')
-Move = namedtuple('Move', 'row, column, block, offset, match_length')
+Match = namedtuple('Match', 'index, tile, length')
+Move = namedtuple('Move', 'row, column, tile, offset, match_length')
 
 
 
@@ -53,13 +53,53 @@ def transpose(grid):
 
 
 def find_matches_in_row(row, min_length=3):
-    from itertools import groupby
-    groups = [Match(0, k, len(list(g))) for k, g in groupby(row)]
-    # 0 above is placeholder for index, update it to real value
-    for i, cur in list(enumerate(groups))[1:]:
-        prev = groups[i - 1]
-        groups[i] = cur._replace(index=prev.index + prev.length)
-    return [g for g in groups if g.length >= min_length]
+    def grouper(acc_matches, next_tile):
+        if not acc_matches:  # got first element in the row
+            return [Match(0, next_tile, 1)]
+        ms, m = acc_matches[:-1], acc_matches[-1]
+        if m.tile == next_tile:
+            return ms + [m._replace(length=m.length + 1)]
+        else:
+            return acc_matches + [Match(m.index + m.length, next_tile, 1)]
+
+    # create matches, consecutive blocks will be grouped together
+    foo = Match(0, 'U', 0)  # makes it easier not having to check list index
+    matches = [foo] + reduce(grouper, row, []) + [foo]
+
+    i = 1
+    while i < len(matches) - 1:
+        prev, cur, nxt = matches[i - 1], matches[i], matches[i + 1]
+        if cur.tile == 'J':
+            if prev.tile == nxt.tile:  # joker between same tiles, join all
+                matches[i - 1] = prev._replace(
+                    length=prev.length + cur.length + nxt.length)
+                matches.remove(cur)
+                matches.remove(nxt)
+            else:  # joker between different tiles, enlarge both & remove joker
+                matches[i - 1] = prev._replace(
+                    length=prev.length + cur.length)
+                matches[i + 1] = nxt._replace(
+                    index=cur.index,
+                    length=cur.length + nxt.length)
+                matches.remove(cur)
+        else:
+            i += 1
+    return [m for m in matches if m.length >= min_length and m.tile != 'U']
+
+
+# too lazy to do proper testing
+tests = [
+    ('ABA', []),
+    ('AAA', [Match(0, 'A', 3)]),
+    ('XAAABBBBCCCCC', [Match(1, 'A', 3), Match(4, 'B', 4), Match(8, 'C', 5)]),
+    ('JJJ', []),  # jokers aren't counted by themselves
+    ('JBBAJADDJ', [Match(0, 'B', 3), Match(3, 'A', 3), Match(6, 'D', 3)]),
+    ('AAJBB', [Match(0, 'A', 3), Match(2, 'B', 3)]),
+    ('BBBAJAJACCC', [Match(0, 'B', 3), Match(3, 'A', 5), Match(8, 'C', 3)]),
+]  # TODO: test with U tiles
+for arg, expected in tests:
+    res = find_matches_in_row(arg, min_length=3)
+    assert res == expected, (arg, res, expected)
 
 
 def find_matches(grid):
@@ -69,16 +109,15 @@ def find_matches(grid):
     return hor, ver
 
 
-def clear_on_axis(grid, axis_matches):
-    for i, matches in axis_matches.items():
-        row = grid[i]
-        for m in matches:
-            row[m.index:m.index + m.length] = 'U' * m.length
-
-
 def clear_matches(grid):
     grid = [list(g) for g in grid]  # make a deep copy
     hor, ver = [dict(m) for m in find_matches(grid)]
+
+    def clear_on_axis(grid, axis_matches):
+        for i, matches in axis_matches.items():
+            row = grid[i]
+            for m in matches:
+                row[m.index:m.index + m.length] = 'U' * m.length
 
     clear_on_axis(grid, hor)
     grid = transpose(grid)
@@ -119,7 +158,16 @@ def find_moves_on_axis(grid):
 grid = get_random_grid()
 print_grid(grid)
 
-#print_grid(clear_matches(grid))
-#print_grid(collapse_matches(clear_matches(grid)))
+print_grid(clear_matches(grid))
 
-print find_moves_on_axis(grid)
+tmp_grid = grid
+while True:
+    collapsed = collapse_matches(clear_matches(tmp_grid))
+    print_grid(collapsed)
+
+    tmp_grid = clear_matches(collapsed)
+    if tmp_grid == collapsed:
+        break
+    else:
+        print '\nCASCADE!\n'
+        print_grid(tmp_grid)
